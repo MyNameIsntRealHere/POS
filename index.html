@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Event POS & Table Manager</title>
+    <style>
+        :root {
+            --bg: #f4f6f8;
+            --card: #ffffff;
+            --primary: #2563eb;
+            --primary-dark: #1d4ed8;
+            --success: #16a34a;
+            --warning: #d97706;
+            --danger: #dc2626;
+            --text: #1e293b;
+            --muted: #64748b;
+            --border: #e2e8f0;
+        }
+
+        * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        body { margin: 0; background: var(--bg); color: var(--text); padding-bottom: 80px; }
+
+        /* Navigation */
+        nav {
+            display: flex; background: var(--card); border-bottom: 1px solid var(--border);
+            position: sticky; top: 0; z-index: 10;
+        }
+        nav button {
+            flex: 1; padding: 15px 10px; border: none; background: none;
+            font-weight: 600; font-size: 15px; color: var(--muted); cursor: pointer;
+            border-bottom: 3px solid transparent;
+        }
+        nav button.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+        .container { max-width: 900px; margin: 0 auto; padding: 16px; }
+        .view { display: none; }
+        .view.active { display: block; }
+
+        /* Cards & Grids */
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+        .card {
+            background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+            padding: 16px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+        }
+
+        /* Table Cards */
+        .table-card { text-align: center; cursor: pointer; transition: transform 0.1s; }
+        .table-card:active { transform: scale(0.98); }
+        .table-card.has-tab { border-color: var(--warning); background: #fffbeb; }
+        .table-num { font-size: 20px; font-weight: 700; margin-bottom: 6px; }
+        .table-tab { font-size: 16px; font-weight: 600; color: var(--warning); }
+        .table-status { font-size: 13px; color: var(--muted); }
+
+        /* Buttons */
+        .btn {
+            display: inline-block; padding: 10px 16px; border: none; border-radius: 8px;
+            font-weight: 600; font-size: 14px; cursor: pointer; text-align: center;
+        }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-success { background: var(--success); color: white; }
+        .btn-warning { background: var(--warning); color: white; }
+        .btn-danger { background: var(--danger); color: white; }
+        .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
+        .btn-block { width: 100%; margin-top: 8px; }
+
+        /* Badges */
+        .badge {
+            padding: 4px 8px; border-radius: 6px; font-size: 12px; font-weight: 700; text-transform: uppercase;
+        }
+        .badge-paid { background: #dcfce7; color: var(--success); }
+        .badge-unpaid { background: #fef3c7; color: var(--warning); }
+
+        /* Order List */
+        .order-card { margin-bottom: 12px; }
+        .order-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+        .order-items { list-style: none; padding: 0; margin: 0 0 12px 0; border-top: 1px solid var(--border); }
+        .order-items li { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #f1f5f9; }
+        .order-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+        /* Modal */
+        .modal-backdrop {
+            display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+            z-index: 20; align-items: center; justify-content: center; padding: 16px;
+        }
+        .modal-backdrop.open { display: flex; }
+        .modal {
+            background: var(--card); border-radius: 12px; width: 100%; max-width: 500px;
+            max-height: 90vh; overflow-y: auto; padding: 20px;
+        }
+        .menu-item-btn {
+            display: flex; justify-content: space-between; width: 100%; padding: 12px;
+            margin-bottom: 8px; background: var(--bg); border: 1px solid var(--border);
+            border-radius: 8px; font-size: 15px; cursor: pointer;
+        }
+        .cart-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; }
+
+        /* Forms */
+        .form-row { display: flex; gap: 8px; margin-bottom: 12px; }
+        input {
+            padding: 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 15px; width: 100%;
+        }
+    </style>
+</head>
+<body>
+
+<nav>
+    <button class="active" onclick="switchView('tables')">Tables</button>
+    <button onclick="switchView('orders')">Open Orders (<span id="open-count">0</span>)</button>
+    <button onclick="switchView('setup')">Menu & Setup</button>
+</nav>
+
+<div class="container">
+    <!-- TABLES VIEW -->
+    <div id="view-tables" class="view active">
+        <div class="grid" id="tables-grid"></div>
+    </div>
+
+    <!-- OPEN ORDERS VIEW -->
+    <div id="view-orders" class="view">
+        <div id="orders-list"></div>
+    </div>
+
+    <!-- MENU & SETUP VIEW -->
+    <div id="view-setup" class="view">
+        <div class="card" style="margin-bottom: 16px;">
+            <h3>Table Count</h3>
+            <div class="form-row">
+                <input type="number" id="table-count-input" min="1" max="100" value="10">
+                <button class="btn btn-primary" onclick="updateTableCount()">Update</button>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>Menu Items</h3>
+            <div class="form-row">
+                <input type="text" id="item-name" placeholder="Item name (e.g. Beer)">
+                <input type="number" id="item-price" step="0.10" placeholder="Price (€)">
+                <button class="btn btn-primary" onclick="addMenuItem()">Add</button>
+            </div>
+            <div id="menu-setup-list"></div>
+        </div>
+    </div>
+</div>
+
+<!-- TABLE / ORDER MODAL -->
+<div class="modal-backdrop" id="table-modal">
+    <div class="modal">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+            <h2 id="modal-title" style="margin:0;">Table 1</h2>
+            <button class="btn btn-outline" onclick="closeModal()">✕</button>
+        </div>
+
+        <!-- Existing Unpaid Tab Section -->
+        <div id="modal-tab-section" class="card" style="background:#fffbeb; border-color:#fcd34d; margin-bottom:16px; display:none;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                    <strong>Unpaid Table Tab:</strong>
+                    <div style="font-size:20px; font-weight:700; color:var(--warning);" id="modal-tab-amount">€0.00</div>
+                </div>
+                <button class="btn btn-success" onclick="settleTableTab()">Mark Tab Paid</button>
+            </div>
+            <ul id="modal-tab-items" style="font-size:13px; color:var(--muted); padding-left:18px; margin-top:8px;"></ul>
+        </div>
+
+        <!-- New Order Section -->
+        <h4>New Order</h4>
+        <div id="modal-menu-list"></div>
+
+        <div id="cart-section" style="border-top: 2px solid var(--border); margin-top: 12px; padding-top: 12px; display:none;">
+            <h4>Current Order</h4>
+            <div id="cart-items"></div>
+            <div style="display:flex; justify-content:space-between; font-weight:700; font-size:18px; margin: 12px 0;">
+                <span>Total:</span>
+                <span id="cart-total">€0.00</span>
+            </div>
+            <button class="btn btn-warning btn-block" onclick="submitOrder(false)">Place Order (Unpaid / Pay Later)</button>
+            <button class="btn btn-success btn-block" onclick="submitOrder(true)">Place Order & Mark Paid</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // --- STATE MANAGEMENT ---
+    let state = JSON.parse(localStorage.getItem('eventPosState')) || {
+        tableCount: 12,
+        menu: [
+            { id: 1, name: 'Pils / Beer', price: 2.50 },
+            { id: 2, name: 'Cola / Soda', price: 2.50 },
+            { id: 3, name: 'Water', price: 2.00 },
+            { id: 4, name: 'Wine', price: 3.50 },
+            { id: 5, name: 'Fries', price: 3.50 }
+        ],
+        openOrders: [], // { id, table, items: [{name, price, qty}], total, paid, timestamp }
+        tableTabs: {}   // { [tableNum]: { total: 0, items: [] } }
+    };
+
+    let currentTable = null;
+    let currentCart = [];
+
+    function saveState() {
+        localStorage.setItem('eventPosState', JSON.stringify(state));
+        renderAll();
+    }
+
+    // --- NAVIGATION ---
+    function switchView(viewName) {
+        document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
+        document.querySelectorAll('nav button').forEach(el => el.classList.remove('active'));
+        document.getElementById(`view-${viewName}`).classList.add('active');
+        event.currentTarget.classList.add('active');
+        renderAll();
+    }
+
+    // --- RENDERING ---
+    function renderAll() {
+        renderTables();
+        renderOpenOrders();
+        renderSetup();
+        document.getElementById('open-count').textContent = state.openOrders.length;
+    }
+
+    function renderTables() {
+        const grid = document.getElementById('tables-grid');
+        grid.innerHTML = '';
+        for (let i = 1; i <= state.tableCount; i++) {
+            const tab = state.tableTabs[i];
+            const openForTable = state.openOrders.filter(o => o.table === i).length;
+            const hasTab = tab && tab.total > 0;
+
+            const card = document.createElement('div');
+            card.className = `card table-card ${hasTab ? 'has-tab' : ''}`;
+            card.onclick = () => openTableModal(i);
+            card.innerHTML = `
+                <div class="table-num">Table ${i}</div>
+                ${hasTab ? `<div class="table-tab">Tab: €${tab.total.toFixed(2)}</div>` : `<div class="table-status">No unpaid tab</div>`}
+                ${openForTable > 0 ? `<div class="table-status" style="color:var(--primary); font-weight:600; margin-top:4px;">${openForTable} open order(s)</div>` : ''}
+            `;
+            grid.appendChild(card);
+        }
+    }
+
+    function renderOpenOrders() {
+        const list = document.getElementById('orders-list');
+        if (state.openOrders.length === 0) {
+            list.innerHTML = '<div class="card" style="text-align:center; color:var(--muted);">No open orders right now.</div>';
+            return;
+        }
+
+        list.innerHTML = '';
+        state.openOrders.forEach(order => {
+            const itemsHtml = order.items.map(i => `<li><span>${i.qty}x ${i.name}</span><span>€${(i.price * i.qty).toFixed(2)}</span></li>`).join('');
+            const card = document.createElement('div');
+            card.className = 'card order-card';
+            card.innerHTML = `
+                <div class="order-header">
+                    <div>
+                        <strong style="font-size:18px;">Table ${order.table}</strong>
+                        <span style="color:var(--muted); font-size:13px; margin-left:8px;">${order.timestamp}</span>
+                    </div>
+                    <span class="badge ${order.paid ? 'badge-paid' : 'badge-unpaid'}">
+                        ${order.paid ? 'Paid' : 'Unpaid'}
+                    </span>
+                </div>
+                <ul class="order-items">${itemsHtml}</ul>
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <strong>Total: €${order.total.toFixed(2)}</strong>
+                    <div class="order-actions">
+                        ${!order.paid ? `<button class="btn btn-success" onclick="closeOrder(${order.id}, true)">Mark Paid & Close</button>` : ''}
+                        <button class="btn btn-primary" onclick="closeOrder(${order.id}, false)">
+                            ${order.paid ? 'Close Order' : 'Close (Keep on Table Tab)'}
+                        </button>
+                    </div>
+                </div>
+            `;
+            list.appendChild(card);
+        });
+    }
+
+    function renderSetup() {
+        document.getElementById('table-count-input').value = state.tableCount;
+        const list = document.getElementById('menu-setup-list');
+        list.innerHTML = state.menu.map(item => `
+            <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--border);">
+                <span><strong>${item.name}</strong> - €${item.price.toFixed(2)}</span>
+                <button class="btn btn-danger" style="padding:4px 10px;" onclick="removeMenuItem(${item.id})">Delete</button>
+            </div>
+        `).join('');
+    }
+
+    // --- TABLE MODAL & ORDERING ---
+    function openTableModal(tableNum) {
+        currentTable = tableNum;
+        currentCart = [];
+        document.getElementById('modal-title').textContent = `Table ${tableNum}`;
+
+        // Render existing unpaid tab
+        const tab = state.tableTabs[tableNum];
+        const tabSection = document.getElementById('modal-tab-section');
+        if (tab && tab.total > 0) {
+            tabSection.style.display = 'block';
+            document.getElementById('modal-tab-amount').textContent = `€${tab.total.toFixed(2)}`;
+            document.getElementById('modal-tab-items').innerHTML = tab.items.map(i => `<li>${i.qty}x ${i.name} (€${(i.price * i.qty).toFixed(2)})</li>`).join('');
+        } else {
+            tabSection.style.display = 'none';
+        }
+
+        // Render menu buttons
+        const menuList = document.getElementById('modal-menu-list');
+        menuList.innerHTML = state.menu.map(item => `
+            <button class="menu-item-btn" onclick="addToCart(${item.id})">
+                <span>${item.name}</span>
+                <strong>€${item.price.toFixed(2)}</strong>
+            </button>
+        `).join('');
+
+        renderCart();
+        document.getElementById('table-modal').classList.add('open');
+    }
+
+    function closeModal() {
+        document.getElementById('table-modal').classList.remove('open');
+        currentTable = null;
+    }
+
+    function addToCart(menuId) {
+        const item = state.menu.find(m => m.id === menuId);
+        const existing = currentCart.find(c => c.id === menuId);
+        if (existing) {
+            existing.qty++;
+        } else {
+            currentCart.push({ ...item, qty: 1 });
+        }
+        renderCart();
+    }
+
+    function removeFromCart(menuId) {
+        const idx = currentCart.findIndex(c => c.id === menuId);
+        if (idx > -1) {
+            currentCart[idx].qty--;
+            if (currentCart[idx].qty <= 0) currentCart.splice(idx, 1);
+        }
+        renderCart();
+    }
+
+    function renderCart() {
+        const section = document.getElementById('cart-section');
+        if (currentCart.length === 0) {
+            section.style.display = 'none';
+            return;
+        }
+        section.style.display = 'block';
+        let total = 0;
+        document.getElementById('cart-items').innerHTML = currentCart.map(item => {
+            total += item.price * item.qty;
+            return `
+                <div class="cart-row">
+                    <span>${item.qty}x ${item.name}</span>
+                    <div>
+                        <span style="margin-right:10px;">€${(item.price * item.qty).toFixed(2)}</span>
+                        <button class="btn btn-outline" style="padding:2px 8px;" onclick="removeFromCart(${item.id})">-</button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+        document.getElementById('cart-total').textContent = `€${total.toFixed(2)}`;
+    }
+
+    function submitOrder(isPaid) {
+        if (currentCart.length === 0) return;
+        const total = currentCart.reduce((sum, item) => sum + (item.price * item.qty), 0);
+        const now = new Date();
+        const timestamp = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0');
+
+        state.openOrders.push({
+            id: Date.now(),
+            table: currentTable,
+            items: [...currentCart],
+            total: total,
+            paid: isPaid,
+            timestamp: timestamp
+        });
+
+        saveState();
+        closeModal();
+    }
+
+    // --- CLOSING & SETTLING ---
+    function closeOrder(orderId, markAsPaidNow) {
+        const idx = state.openOrders.findIndex(o => o.id === orderId);
+        if (idx === -1) return;
+
+        const order = state.openOrders[idx];
+        const finalPaidStatus = order.paid || markAsPaidNow;
+
+        // If still unpaid when closed, move amount & items to the table's running tab
+        if (!finalPaidStatus) {
+            if (!state.tableTabs[order.table]) {
+                state.tableTabs[order.table] = { total: 0, items: [] };
+            }
+            state.tableTabs[order.table].total += order.total;
+            state.tableTabs[order.table].items.push(...order.items);
+        }
+
+        state.openOrders.splice(idx, 1);
+        saveState();
+    }
+
+    function settleTableTab() {
+        if (!currentTable) return;
+        delete state.tableTabs[currentTable];
+        saveState();
+        closeModal();
+    }
+
+    // --- SETUP ACTIONS ---
+    function updateTableCount() {
+        const val = parseInt(document.getElementById('table-count-input').value);
+        if (val > 0) {
+            state.tableCount = val;
+            saveState();
+        }
+    }
+
+    function addMenuItem() {
+        const name = document.getElementById('item-name').value.trim();
+        const price = parseFloat(document.getElementById('item-price').value);
+        if (name && !isNaN(price) && price >= 0) {
+            state.menu.push({ id: Date.now(), name, price });
+            document.getElementById('item-name').value = '';
+            document.getElementById('item-price').value = '';
+            saveState();
+        }
+    }
+
+    function removeMenuItem(id) {
+        state.menu = state.menu.filter(m => m.id !== id);
+        saveState();
+    }
+
+    // Initialize
+    renderAll();
+</script>
+
+</body>
+</html>
